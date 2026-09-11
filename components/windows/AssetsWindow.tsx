@@ -1,26 +1,53 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/store/appStore";
 import { formatMs } from "@/lib/time";
+import { getLiveKind, getLiveVideo, subscribeLive } from "@/lib/liveSources";
+import { drawProcedural } from "@/lib/procedural";
 import { FolderPlus, Image as ImageIcon, Film, Music, Radio, Box } from "lucide-react";
 import type { Asset } from "@/types/show";
 
 export function AssetsWindow() {
   const show = useApp((s) => s.show);
   const selection = useApp((s) => s.selection);
+  const liveTick = useApp((s) => s.liveTick);
   const fileRef = useRef<HTMLInputElement>(null);
   if (!show) return null;
   const selected = selection.kind === "asset" ? selection.ids : [];
   const preview = show.assets.find((a) => a.id === selected[0]);
+  void liveTick;
 
   return (
     <div className="flex h-full flex-col bg-[#171717]">
-      <div className="flex items-center gap-2 border-b border-black px-2 py-1 text-[11px]">
+      <div className="flex flex-wrap items-center gap-1 border-b border-black px-2 py-1 text-[11px]">
         <button className="rounded bg-[#f5a623] px-2 py-0.5 text-black" onClick={() => fileRef.current?.click()}>
           Import
         </button>
-        <span className="text-stone-500">{show.assets.length} assets</span>
+        <button
+          className="rounded bg-[#14532d] px-2 py-0.5 text-emerald-100"
+          onClick={() => {
+            const id = useApp.getState().ensureNdiAsset();
+            if (id) void useApp.getState().connectLiveSource(id, "camera");
+          }}
+        >
+          NDI Camera
+        </button>
+        <button
+          className="rounded bg-[#14532d] px-2 py-0.5 text-emerald-100"
+          onClick={() => {
+            const id = useApp.getState().ensureNdiAsset();
+            if (id) void useApp.getState().connectLiveSource(id, "screen");
+          }}
+        >
+          NDI Screen
+        </button>
+        <button
+          className="rounded bg-[#14532d] px-2 py-0.5 text-emerald-100"
+          onClick={() => useApp.getState().setDialog("ndiSource")}
+        >
+          NDI URL
+        </button>
         <span className="ml-auto text-stone-600">Asset Manager · {show.assetManager}</span>
         <input
           ref={fileRef}
@@ -59,27 +86,83 @@ export function AssetsWindow() {
                   {a.kind} · {a.codec} · {a.width ? `${a.width}×${a.height}` : ""} · {formatMs(a.duration)}
                 </div>
               </div>
-              <span className={`h-2 w-2 rounded-full ${a.optimized ? "bg-emerald-400" : "bg-amber-400"}`} />
+              <span className={`h-2 w-2 rounded-full ${getLiveKind(a.id) ? "bg-emerald-400" : a.optimized ? "bg-emerald-700" : "bg-amber-400"}`} />
             </div>
           ))}
           {show.assets.length === 0 && (
             <div className="p-6 text-center text-stone-500">
-              Import images, video or audio — then drag onto the Timeline or Stage.
+              Import media or connect an NDI camera / screen source, then drag onto the Timeline or Stage.
             </div>
           )}
         </div>
         <div className="border-l border-black p-2">
-          <div className="checker mb-2 grid aspect-video place-items-center overflow-hidden rounded border border-[#333]">
-            {preview?.url && !preview.url.startsWith("procedural:") ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={preview.url} alt="" className="h-full w-full object-contain" />
-            ) : (
-              <span className="text-[10px] text-stone-500">{preview?.kind ?? "preview"}</span>
-            )}
-          </div>
+          <AssetPreview asset={preview} />
           {preview && <div className="text-[10px] leading-relaxed text-stone-400">{preview.notes || preview.name}</div>}
         </div>
       </div>
+    </div>
+  );
+}
+
+function AssetPreview({ asset }: { asset?: Asset }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [, setTick] = useState(0);
+
+  useEffect(() => subscribeLive(() => setTick((n) => n + 1)), []);
+
+  useEffect(() => {
+    if (!asset || (asset.kind !== "ndi" && asset.kind !== "capture" && !asset.url.startsWith("procedural:"))) return;
+    let raf = 0;
+    const paint = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        raf = requestAnimationFrame(paint);
+        return;
+      }
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const live = getLiveVideo(asset.id);
+      ctx.fillStyle = "#111";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      if (live && live.readyState >= 2) ctx.drawImage(live, 0, 0, canvas.width, canvas.height);
+      else if (asset.kind === "ndi" || asset.kind === "capture" || asset.url.startsWith("procedural:")) {
+        const kind = asset.url.startsWith("procedural:") ? asset.url.slice("procedural:".length) : "ndi";
+        drawProcedural(ctx, kind, canvas.width, canvas.height, performance.now());
+      }
+      raf = requestAnimationFrame(paint);
+    };
+    raf = requestAnimationFrame(paint);
+    return () => cancelAnimationFrame(raf);
+  }, [asset]);
+
+  if (!asset) {
+    return (
+      <div className="checker mb-2 grid aspect-video place-items-center overflow-hidden rounded border border-[#333]">
+        <span className="text-[10px] text-stone-500">preview</span>
+      </div>
+    );
+  }
+
+  if (asset.kind === "ndi" || asset.kind === "capture" || asset.url.startsWith("procedural:")) {
+    return (
+      <div className="mb-2 overflow-hidden rounded border border-[#333]">
+        <canvas ref={canvasRef} width={240} height={135} className="block w-full" />
+      </div>
+    );
+  }
+
+  if (asset.url && !asset.url.startsWith("procedural:")) {
+    return (
+      <div className="checker mb-2 grid aspect-video place-items-center overflow-hidden rounded border border-[#333]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={asset.url} alt="" className="h-full w-full object-contain" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="checker mb-2 grid aspect-video place-items-center overflow-hidden rounded border border-[#333]">
+      <span className="text-[10px] text-stone-500">{asset.kind}</span>
     </div>
   );
 }

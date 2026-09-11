@@ -1,15 +1,24 @@
 "use client";
 
+import { useState } from "react";
 import { useApp, useActiveTimeline } from "@/store/appStore";
 import { formatMs } from "@/lib/time";
 import { Pause, Play, Square, Plus } from "lucide-react";
+import { PopupMenu } from "@/components/ContextMenu";
 
 export function TimelinesWindow() {
   const show = useApp((s) => s.show);
   const activeId = useApp((s) => s.activeTimelineId);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   if (!show) return null;
   return (
-    <div className="flex h-full flex-col bg-[#1a1a1a]">
+    <div
+      className="flex h-full flex-col bg-[#1a1a1a]"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenu({ x: e.clientX, y: e.clientY });
+      }}
+    >
       <div className="flex items-center justify-between border-b border-black px-2 py-1 text-[11px] text-stone-400">
         <span>{show.timelines.length} timelines</span>
         <button className="inline-flex items-center gap-1 hover:text-[#f5a623]" onClick={() => useApp.getState().addTimeline()}>
@@ -25,8 +34,18 @@ export function TimelinesWindow() {
               className={`flex w-full items-center gap-2 border-b border-[#222] px-2 py-1.5 text-left ${
                 active ? "bg-[#3b2a12] text-[#f5a623]" : "hover:bg-white/5"
               }`}
-              onClick={() => useApp.getState().setActiveTimeline(t.id)}
+              onClick={() => {
+                useApp.getState().setActiveTimeline(t.id);
+                useApp.getState().select({ kind: "timeline", ids: [t.id] });
+              }}
               onDoubleClick={() => useApp.getState().focusWindow("timeline")}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                useApp.getState().setActiveTimeline(t.id);
+                useApp.getState().select({ kind: "timeline", ids: [t.id] });
+                setMenu({ x: e.clientX, y: e.clientY });
+              }}
             >
               <span
                 className={`h-2 w-2 rounded-full ${
@@ -44,6 +63,27 @@ export function TimelinesWindow() {
           );
         })}
       </div>
+      {menu && (
+        <PopupMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          items={[
+            {
+              label: "Add Timeline",
+              onClick: () => useApp.getState().addTimeline(),
+            },
+            {
+              label: "Open Timeline",
+              onClick: () => useApp.getState().focusWindow("timeline"),
+            },
+            {
+              label: "Rename in Properties",
+              onClick: () => useApp.getState().focusWindow("properties"),
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }

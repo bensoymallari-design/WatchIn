@@ -3,7 +3,9 @@
 import { useApp, useActiveTimeline } from "@/store/appStore";
 import { formatMs } from "@/lib/time";
 import { TWEEN_META } from "@/lib/tweens";
-import type { Cue, Display } from "@/types/show";
+import { cueHasConflict } from "@/lib/timeline";
+import { EASING_OPTIONS } from "@/lib/easing";
+import type { Cue, Display, Easing } from "@/types/show";
 
 export function PropertiesWindow() {
   const show = useApp((s) => s.show);
@@ -30,6 +32,19 @@ export function PropertiesWindow() {
           <Read label="Size" value={`${a.width}×${a.height}`} />
           <Read label="Duration" value={formatMs(a.duration)} />
           <Read label="Notes" value={a.notes || "—"} />
+        </Panel>
+      );
+    }
+  }
+  if (selection.kind === "layer" && selection.ids[0] && tl) {
+    const layer = tl.layers.find((l) => l.id === selection.ids[0]);
+    if (layer) {
+      return (
+        <Panel title="Layer">
+          <Field label="Name" value={layer.name} onChange={(v) => useApp.getState().updateLayer(layer.id, { name: v })} />
+          <Check label="Enabled" checked={layer.enabled} onChange={(v) => useApp.getState().updateLayer(layer.id, { enabled: v })} />
+          <Check label="Locked" checked={layer.locked} onChange={(v) => useApp.getState().updateLayer(layer.id, { locked: v })} />
+          <Read label="Order" value={`Layer ${tl.layers.findIndex((l) => l.id === layer.id) + 1} of ${tl.layers.length} · 1 is in front`} />
         </Panel>
       );
     }
@@ -66,6 +81,8 @@ export function PropertiesWindow() {
 
 function CueProps({ cue }: { cue: Cue }) {
   const u = (partial: Partial<Cue>) => useApp.getState().updateCue(cue.id, partial);
+  const tl = useActiveTimeline();
+  const conflict = tl ? cueHasConflict(cue, tl.cues) : false;
   return (
     <Panel title={`${cue.type} cue`}>
       <Field label="Name" value={cue.name} onChange={(v) => u({ name: v })} />
@@ -74,6 +91,26 @@ function CueProps({ cue }: { cue: Cue }) {
       <Num label="Duration ms" value={Math.round(cue.duration)} onChange={(v) => u({ duration: v })} />
       <Check label="Enabled" checked={cue.enabled} onChange={(v) => u({ enabled: v })} />
       <Check label="Free running" checked={cue.freeRunning} onChange={(v) => u({ freeRunning: v })} />
+      {conflict && (
+        <div className="my-1 rounded border border-amber-700/60 bg-amber-950/40 px-2 py-1 text-[11px] text-amber-200">
+          Same-layer overlap conflict. Move the cues apart, or apply fade-out on the first and fade-in on the next.
+        </div>
+      )}
+      <div className="mt-2 text-[10px] uppercase tracking-wider text-stone-500">Fade in / out</div>
+      <Check label="Fade-in" checked={cue.fadeIn} onChange={(v) => u({ fadeIn: v })} />
+      <Num label="Fade-in ms" value={cue.fadeInDuration} onChange={(v) => u({ fadeInDuration: v })} />
+      <Check label="Fade-out" checked={cue.fadeOut} onChange={(v) => u({ fadeOut: v })} />
+      <Num label="Fade-out ms" value={cue.fadeOutDuration} onChange={(v) => u({ fadeOutDuration: v })} />
+      <label className="grid grid-cols-[92px_1fr] items-center gap-2 py-0.5">
+        <span className="text-stone-500">Fade curve</span>
+        <select value={cue.fadeCurve} onChange={(e) => u({ fadeCurve: e.target.value as Easing })}>
+          {EASING_OPTIONS.map((opt) => (
+            <option key={opt.id} value={opt.id}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <Num label="Position X" value={cue.position.x} onChange={(v) => u({ position: { ...cue.position, x: v } })} />
       <Num label="Position Y" value={cue.position.y} onChange={(v) => u({ position: { ...cue.position, y: v } })} />
       <Num label="Scale X %" value={cue.scale.x} onChange={(v) => u({ scale: { ...cue.scale, x: v } })} />

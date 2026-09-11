@@ -108,6 +108,11 @@ export interface Cue {
   crop: { top: number; bottom: number; left: number; right: number };
   anchor: { x: number; y: number };
   freeRunning: boolean;
+  fadeIn: boolean;
+  fadeOut: boolean;
+  fadeInDuration: number;
+  fadeOutDuration: number;
+  fadeCurve: Easing;
   tweens: Tween[];
   control?: {
     state: ControlState;
@@ -328,4 +333,5 @@ export type DialogKind =
   | "about"
   | "find"
   | "insertTime"
-  | "connectDirector";
+  | "connectDirector"
+  | "ndiSource";

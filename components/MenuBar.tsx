@@ -197,6 +197,15 @@ function TimelineMenu() {
       <Item label="Add ArtNet Cue" onClick={() => { a().addCueType("artnet"); a().setMenu(null); }} />
       <Sep />
       <Item label="Add Layer" shortcut="Ctrl+I" onClick={() => { a().addLayer(); a().setMenu(null); }} />
+      <Item label="Insert Layer" onClick={() => { a().insertLayer(); a().setMenu(null); }} />
+      <Item
+        label="Delete Layer"
+        onClick={() => {
+          const sel = a().selection;
+          if (sel.kind === "layer" && sel.ids[0]) a().deleteLayer(sel.ids[0]);
+          a().setMenu(null);
+        }}
+      />
     </>
   );
 }
@@ -205,6 +214,10 @@ function EffectMenu() {
   const a = useApp.getState;
   return (
     <>
+      <Item label="Fade-in" shortcut="Shift+Alt+I" onClick={() => { a().toggleFade("in"); a().setMenu(null); }} />
+      <Item label="Fade-out" shortcut="Shift+Alt+O" onClick={() => { a().toggleFade("out"); a().setMenu(null); }} />
+      <Item label="Cross-fade" shortcut="Shift+Alt+X" onClick={() => { a().applyCrossfade(); a().setMenu(null); }} />
+      <Sep />
       {EFFECT_TOGGLES.map((t) => (
         <Item
           key={t.type}

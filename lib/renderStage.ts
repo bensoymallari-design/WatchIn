@@ -1,5 +1,6 @@
 import type { EvaluatedCue } from "@/lib/tweens";
 import type { Asset, Display } from "@/types/show";
+import { getLiveVideo } from "@/lib/liveSources";
 import { drawProcedural } from "@/lib/procedural";
 
 const imageCache = new Map<string, HTMLImageElement>();
@@ -28,6 +29,9 @@ export function getVideo(id: string, url: string) {
     v.crossOrigin = "anonymous";
     void v.play().catch(() => undefined);
     videoCache.set(id, v);
+  } else if (v.src !== url && !v.srcObject) {
+    v.src = url;
+    void v.play().catch(() => undefined);
   }
   return v;
 }
@@ -48,11 +52,16 @@ function procCanvas(kind: string, timeMs: number) {
 
 function sourceFor(asset: Asset | undefined, cueId: string, timeMs: number): CanvasImageSource | null {
   if (!asset) return null;
+  const live = getLiveVideo(asset.id);
+  if (live && live.readyState >= 2) return live;
+  if (asset.kind === "ndi" || asset.kind === "capture") {
+    return procCanvas("ndi", timeMs);
+  }
   if (asset.url.startsWith("procedural:")) {
     return procCanvas(asset.url.slice("procedural:".length), timeMs);
   }
   if (asset.kind === "video" && asset.url) {
-    const v = getVideo(cueId, asset.url);
+    const v = getVideo(asset.id || cueId, asset.url);
     if (v.readyState >= 2) return v;
     return null;
   }

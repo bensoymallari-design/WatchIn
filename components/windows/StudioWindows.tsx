@@ -33,11 +33,20 @@ export function DevicesWindow() {
       </Section>
       <Section title="Capture">
         {show.captureDevices.map((d) => (
-          <div key={d.id} className="flex justify-between border-b border-[#222] px-3 py-1.5">
+          <div key={d.id} className="flex items-center justify-between gap-2 border-b border-[#222] px-3 py-1.5">
             <span>{d.name}</span>
             <span className="text-stone-500">
               {d.kind} · {d.signal}
             </span>
+            <button
+              className="rounded bg-[#14532d] px-2 py-0.5 text-[11px] text-emerald-100"
+              onClick={() => {
+                const id = useApp.getState().ensureNdiAsset();
+                if (id) void useApp.getState().connectLiveSource(id, d.kind === "USB" ? "camera" : "screen");
+              }}
+            >
+              Connect
+            </button>
           </div>
         ))}
       </Section>
