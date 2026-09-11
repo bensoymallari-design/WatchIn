@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "npx --yes tsx --test lib/timeline.test.ts"
+    "test": "npx --yes tsx --test lib/timeline.test.ts lib/ndiNames.test.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
