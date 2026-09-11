@@ -87,9 +87,9 @@ input:focus, select:focus, textarea:focus {
 .cue-stripe {
   background-image: repeating-linear-gradient(
     -45deg,
-    rgba(255,255,255,0.12),
-    rgba(255,255,255,0.12) 6px,
-    transparent 6px,
-    transparent 12px
+    rgba(255,255,255,0.38),
+    rgba(255,255,255,0.38) 5px,
+    rgba(0,0,0,0.28) 5px,
+    rgba(0,0,0,0.28) 10px
   );
 }

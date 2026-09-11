@@ -14,7 +14,8 @@ import type {
 import { defaultLayout, liveLayout, programmingLayout } from "@/lib/layout";
 import { uid } from "@/lib/ids";
 import { emptyCue, emptyDisplay, emptyLayer, emptyShow, emptyTimeline, emptyAsset, makeDemoShow } from "@/lib/showFactory";
-import { fadeTweens, makeTween } from "@/lib/tweens";
+import { makeTween } from "@/lib/tweens";
+import { cueEnd, findCrossfadePair } from "@/lib/timeline";
 import { connectCamera, connectScreen, connectUrl } from "@/lib/liveSources";
 import { downloadShow, loadLayouts, loadRecents, loadShowLocal, saveLayouts, saveShowLocal, type RecentShow } from "@/lib/persistence";
 
@@ -90,6 +91,7 @@ interface AppActions {
   setPlayback: (timelineId: string, state: Timeline["playback"]) => void;
   tickPlayback: (dt: number) => void;
   addLayer: () => void;
+  insertLayer: (afterId?: string) => void;
   deleteLayer: (id: string) => void;
   updateLayer: (id: string, partial: Partial<Timeline["layers"][number]>) => void;
   addCueFromAsset: (assetId: string, layerId?: string, start?: number, position?: { x: number; y: number }) => void;
@@ -100,6 +102,8 @@ interface AppActions {
   moveCues: (ids: string[], dStart: number, layerId?: string) => void;
   resizeCue: (id: string, start: number, duration: number) => void;
   toggleTween: (type: TweenType) => void;
+  toggleFade: (which: "in" | "out") => void;
+  applyCrossfade: () => void;
   updateTweenPoint: (cueId: string, tweenId: string, pointId: string, partial: { time?: number; value?: number }) => void;
   addDisplay: (partial?: Partial<Display>) => void;
   addDisplayGrid: (cols: number, rows: number, w: number, h: number, gap: number) => void;
@@ -469,26 +473,42 @@ export const useApp = create<AppState & AppActions>((set, get) => ({
 
   addLayer: () =>
     set((s) =>
-      patchShow(s, (show) => {
-        const id = s.activeTimelineId;
-        return {
-          ...show,
-          timelines: show.timelines.map((t) =>
-            t.id === id ? { ...t, layers: [...t.layers, emptyLayer(`Layer ${t.layers.length + 1}`, t.layers.length + 1)] } : t,
-          ),
-        };
-      }),
+      patchShow(s, (show) => ({
+        ...show,
+        timelines: show.timelines.map((t) =>
+          t.id === s.activeTimelineId
+            ? { ...t, layers: [...t.layers, emptyLayer(`Layer ${t.layers.length + 1}`, t.layers.length + 1)] }
+            : t,
+        ),
+      })),
+    ),
+
+  insertLayer: (afterId) =>
+    set((s) =>
+      patchShow(s, (show) => ({
+        ...show,
+        timelines: show.timelines.map((t) => {
+          if (t.id !== s.activeTimelineId) return t;
+          const selectedLayer = s.selection.kind === "layer" ? s.selection.ids[0] : undefined;
+          const after = afterId ?? selectedLayer;
+          const idx = after ? t.layers.findIndex((l) => l.id === after) : t.layers.length - 1;
+          const at = idx >= 0 ? idx + 1 : t.layers.length;
+          const layers = [...t.layers];
+          layers.splice(at, 0, emptyLayer(`Layer ${t.layers.length + 1}`, at + 1));
+          return { ...t, layers };
+        }),
+      })),
     ),
 
   deleteLayer: (id) =>
     set((s) =>
       patchShow(s, (show) => ({
         ...show,
-        timelines: show.timelines.map((t) =>
-          t.id === s.activeTimelineId
-            ? { ...t, layers: t.layers.filter((l) => l.id !== id), cues: t.cues.filter((c) => c.layerId !== id) }
-            : t,
-        ),
+        timelines: show.timelines.map((t) => {
+          if (t.id !== s.activeTimelineId) return t;
+          if (t.layers.length <= 1) return t;
+          return { ...t, layers: t.layers.filter((l) => l.id !== id), cues: t.cues.filter((c) => c.layerId !== id) };
+        }),
       })),
     ),
 
@@ -510,7 +530,8 @@ export const useApp = create<AppState & AppActions>((set, get) => ({
         if (!tl) return show;
         const asset = show.assets.find((a) => a.id === assetId);
         if (!asset) return show;
-        const layer = layerId ?? tl.layers.find((l) => !l.locked)?.id ?? tl.layers[0].id;
+        const requested = layerId ? tl.layers.find((l) => l.id === layerId) : undefined;
+        const layer = (requested && !requested.locked ? requested.id : tl.layers.find((l) => !l.locked)?.id) ?? tl.layers[0].id;
         const live = asset.kind === "ndi" || asset.kind === "capture";
         const duration = live
           ? Math.max(tl.duration - (start ?? tl.playhead), 10000)
@@ -518,7 +539,6 @@ export const useApp = create<AppState & AppActions>((set, get) => ({
             ? show.prefs.imageDuration
             : asset.duration || 5000;
         const cueStart = start ?? tl.playhead;
-        const tweens = !live && show.prefs.autoFade ? fadeTweens(duration, show.prefs.fadeIn, show.prefs.fadeOut) : [];
         const cue = emptyCue({
           name: asset.name,
           type: "media",
@@ -528,8 +548,13 @@ export const useApp = create<AppState & AppActions>((set, get) => ({
           assetId,
           color: asset.color,
           position: position ? { x: position.x, y: position.y, z: 0 } : { x: 0, y: 0, z: 0 },
-          tweens,
+          tweens: [],
           freeRunning: live,
+          fadeIn: !live && show.prefs.autoFade,
+          fadeOut: !live && show.prefs.autoFade,
+          fadeInDuration: show.prefs.fadeIn,
+          fadeOutDuration: show.prefs.fadeOut,
+          fadeCurve: show.prefs.fadeCurve,
         });
         return {
           ...show,
@@ -677,6 +702,86 @@ export const useApp = create<AppState & AppActions>((set, get) => ({
         };
       }),
     ),
+
+  toggleFade: (which) =>
+    set((s) =>
+      patchShow(s, (show) => {
+        const ids = new Set(s.selection.kind === "cue" ? s.selection.ids : []);
+        return {
+          ...show,
+          timelines: show.timelines.map((t) => ({
+            ...t,
+            cues: t.cues.map((c) => {
+              if (!ids.has(c.id)) return c;
+              if (which === "in") {
+                return {
+                  ...c,
+                  fadeIn: !c.fadeIn,
+                  fadeInDuration: c.fadeInDuration || show.prefs.fadeIn,
+                  fadeCurve: c.fadeCurve || show.prefs.fadeCurve,
+                };
+              }
+              return {
+                ...c,
+                fadeOut: !c.fadeOut,
+                fadeOutDuration: c.fadeOutDuration || show.prefs.fadeOut,
+                fadeCurve: c.fadeCurve || show.prefs.fadeCurve,
+              };
+            }),
+          })),
+        };
+      }),
+    ),
+
+  applyCrossfade: () => {
+    let note = "";
+    set((s) =>
+      patchShow(s, (show) => {
+        const tl = activeTimeline(show, s.activeTimelineId);
+        if (!tl) return show;
+        const ids = s.selection.kind === "cue" ? s.selection.ids : [];
+        const pair = findCrossfadePair(tl.cues, ids);
+        if (!pair) return show;
+        const [a, b] = pair;
+        const fadeDur = Math.max(120, show.prefs.fadeIn || 500);
+        let bStart = b.start;
+        const currentOverlap = Math.min(cueEnd(a), cueEnd(b)) - Math.max(a.start, b.start);
+        if (currentOverlap <= 0 || a.layerId !== b.layerId) {
+          bStart = Math.max(0, cueEnd(a) - fadeDur);
+        }
+        const overlap = Math.min(cueEnd(a), bStart + b.duration) - Math.max(a.start, bStart);
+        const dur = Math.max(120, overlap > 0 ? overlap : fadeDur);
+        note = `Cross-fade ${a.name} → ${b.name}  (${Math.round(dur)} ms)`;
+        return {
+          ...show,
+          timelines: show.timelines.map((t) =>
+            t.id !== tl.id
+              ? t
+              : {
+                  ...t,
+                  cues: t.cues.map((c) => {
+                    if (c.id === a.id) {
+                      return { ...c, fadeOut: true, fadeOutDuration: dur, fadeCurve: c.fadeCurve || show.prefs.fadeCurve };
+                    }
+                    if (c.id === b.id) {
+                      return {
+                        ...c,
+                        start: bStart,
+                        layerId: a.layerId,
+                        fadeIn: true,
+                        fadeInDuration: dur,
+                        fadeCurve: c.fadeCurve || show.prefs.fadeCurve,
+                      };
+                    }
+                    return c;
+                  }),
+                },
+          ),
+        };
+      }),
+    );
+    if (note) get().log(note);
+  },
 
   updateTweenPoint: (cueId, tweenId, pointId, partial) =>
     set((s) =>

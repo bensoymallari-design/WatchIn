@@ -1,4 +1,4 @@
-import type { Easing } from "@/types/show";
+import type { Easing } from "../types/show";
 
 function bounceOut(t: number) {
   const n1 = 7.5625;

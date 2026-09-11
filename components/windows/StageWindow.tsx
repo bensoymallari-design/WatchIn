@@ -28,7 +28,7 @@ export function StageWindow() {
               if (!layer.enabled) return [];
               return t.cues
                 .filter((c) => c.layerId === layer.id)
-                .map((c) => evaluateCue(c, t.playhead))
+                .map((c) => evaluateCue(c, t.playhead, t.cues))
                 .filter((x): x is NonNullable<typeof x> => !!x);
             });
           });

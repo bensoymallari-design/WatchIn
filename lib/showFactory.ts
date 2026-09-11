@@ -1,6 +1,6 @@
 import type { Asset, Cue, Display, Layer, Show, ShowNode, Timeline } from "@/types/show";
 import { uid } from "@/lib/ids";
-import { fadeTweens, makeTween } from "@/lib/tweens";
+import { makeTween } from "@/lib/tweens";
 
 export function defaultCueColor(type: Cue["type"]) {
   switch (type) {
@@ -30,7 +30,7 @@ export function emptyLayer(name: string, index: number): Layer {
 }
 
 export function emptyTimeline(name = "Main Timeline"): Timeline {
-  const layers = [1, 2, 3, 4].map((i) => emptyLayer(`Layer ${i}`, i));
+  const layers = Array.from({ length: 10 }, (_, i) => emptyLayer(`Layer ${i + 1}`, i + 1));
   return {
     id: uid("tl"),
     name,
@@ -108,6 +108,11 @@ export function emptyCue(partial: Partial<Cue> & Pick<Cue, "layerId" | "start">)
     crop: { top: 0, bottom: 0, left: 0, right: 0 },
     anchor: { x: 0.5, y: 0.5 },
     freeRunning: false,
+    fadeIn: false,
+    fadeOut: false,
+    fadeInDuration: 500,
+    fadeOutDuration: 500,
+    fadeCurve: "linear",
     tweens: [],
     ...partial,
   };
@@ -146,10 +151,10 @@ export function emptyShow(name = "Untitled Show"): Show {
       sdiGenlock: false,
       audioBuses: ["Master", "Bus 1", "Bus 2"],
       imageDuration: 5000,
-      autoFade: true,
+      autoFade: false,
       fadeIn: 500,
       fadeOut: 500,
-      fadeCurve: "sineInOut",
+      fadeCurve: "linear",
       ndiExtraIps: "",
     },
     assets: [],
@@ -288,7 +293,10 @@ export function makeDemoShow(): Show {
   control.duration = 45000;
 
   const [l1, l2, l3, l4] = main.layers;
-  const fade = (d: number) => fadeTweens(d, 800, 800);
+  l1.name = "Titles";
+  l2.name = "Full wall";
+  l3.name = "Overlays";
+  l4.name = "Live";
 
   main.cues = [
     emptyCue({
@@ -299,8 +307,11 @@ export function makeDemoShow(): Show {
       assetId: title.id,
       color: title.color,
       position: { x: 1920, y: 0, z: 0 },
+      fadeIn: true,
+      fadeOut: true,
+      fadeInDuration: 800,
+      fadeOutDuration: 1000,
       tweens: [
-        ...fade(7000),
         makeTween("scaleX", [
           { time: 0, value: 92, easing: "cubicOut" },
           { time: 1800, value: 100, easing: "cubicOut" },
@@ -313,23 +324,30 @@ export function makeDemoShow(): Show {
     }),
     emptyCue({
       name: "Color Bars",
-      layerId: l2.id,
+      layerId: l1.id,
       start: 6500,
       duration: 8000,
       assetId: bars.id,
       color: bars.color,
-      tweens: fade(8000),
+      position: { x: 1920, y: 0, z: 0 },
+      fadeIn: true,
+      fadeOut: true,
+      fadeInDuration: 1000,
+      fadeOutDuration: 800,
     }),
     emptyCue({
       name: "Aurora Full Wall",
-      layerId: l3.id,
+      layerId: l2.id,
       start: 12000,
       duration: 18000,
       assetId: aurora.id,
       color: aurora.color,
       scale: { x: 300, y: 100 },
+      fadeIn: true,
+      fadeOut: true,
+      fadeInDuration: 800,
+      fadeOutDuration: 800,
       tweens: [
-        ...fade(18000),
         makeTween("positionX", [
           { time: 0, value: -400, easing: "sineInOut" },
           { time: 18000, value: 400, easing: "sineInOut" },
@@ -348,13 +366,34 @@ export function makeDemoShow(): Show {
     }),
     emptyCue({
       name: "End Grid",
-      layerId: l2.id,
-      start: 34000,
+      layerId: l1.id,
+      start: 13700,
       duration: 9000,
       assetId: grid.id,
       color: grid.color,
       position: { x: 1920, y: 0, z: 0 },
-      tweens: fade(9000),
+      fadeIn: true,
+      fadeOut: true,
+      fadeInDuration: 800,
+      fadeOutDuration: 800,
+    }),
+    emptyCue({
+      name: "Overlap A",
+      layerId: l3.id,
+      start: 24000,
+      duration: 5000,
+      assetId: bars.id,
+      color: bars.color,
+      position: { x: 1920, y: 0, z: 0 },
+    }),
+    emptyCue({
+      name: "Overlap B",
+      layerId: l3.id,
+      start: 27000,
+      duration: 5000,
+      assetId: grid.id,
+      color: grid.color,
+      position: { x: 1920, y: 0, z: 0 },
     }),
     emptyCue({
       type: "marker",

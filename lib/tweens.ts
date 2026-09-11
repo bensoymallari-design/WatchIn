@@ -1,6 +1,7 @@
 import type { Cue, Tween, TweenType } from "@/types/show";
 import { ease } from "@/lib/easing";
 import { uid } from "@/lib/ids";
+import { fadeMultiplier } from "@/lib/timeline";
 
 export function evalTween(tween: Tween, localTime: number) {
   if (!tween.enabled || tween.points.length === 0) return undefined;
@@ -55,15 +56,16 @@ function pick(map: Map<TweenType, Tween>, type: TweenType, local: number, fallba
   return v === undefined ? fallback : v;
 }
 
-export function evaluateCue(cue: Cue, playhead: number): EvaluatedCue | null {
+export function evaluateCue(cue: Cue, playhead: number, others: Cue[] = []): EvaluatedCue | null {
   if (!cue.enabled) return null;
   if (playhead < cue.start || playhead >= cue.start + cue.duration) return null;
   const local = playhead - cue.start;
   const map = tweenMap(cue);
+  const opacity = pick(map, "opacity", local, cue.opacity) * fadeMultiplier(cue, local, others);
   return {
     cue,
     localTime: local,
-    opacity: pick(map, "opacity", local, cue.opacity),
+    opacity,
     x: pick(map, "positionX", local, cue.position.x),
     y: pick(map, "positionY", local, cue.position.y),
     z: pick(map, "positionZ", local, cue.position.z),

@@ -107,6 +107,21 @@ export function Keyboard() {
         a.setPlayback(tl.id, tl.playback === "play" ? "pause" : "play");
         return;
       }
+      if (e.altKey && e.shiftKey && e.code === "KeyI") {
+        e.preventDefault();
+        a.toggleFade("in");
+        return;
+      }
+      if (e.altKey && e.shiftKey && e.code === "KeyO") {
+        e.preventDefault();
+        a.toggleFade("out");
+        return;
+      }
+      if (e.altKey && e.shiftKey && e.code === "KeyX") {
+        e.preventDefault();
+        a.applyCrossfade();
+        return;
+      }
       if (e.key === "Delete" || e.key === "Backspace") {
         a.deleteSelected();
         return;
