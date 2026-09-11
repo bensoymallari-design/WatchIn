@@ -36,10 +36,21 @@ export function TimelineWindow() {
 
   return (
     <div className="flex h-full flex-col bg-[#151515]">
-      <div className="flex h-7 items-center gap-3 border-b border-black bg-[#1c1c1c] px-2 text-[11px]">
+      <div className="flex h-7 items-center gap-2 border-b border-black bg-[#1c1c1c] px-2 text-[11px]">
         <span className="font-semibold text-[#e56dff]">{tl.name}</span>
         <span className="font-mono text-stone-300">{formatMs(tl.playhead)}</span>
-        <span className="text-stone-500">{tl.playback.toUpperCase()}</span>
+        <span className={`rounded px-1.5 text-[10px] ${tl.playback === "play" ? "bg-emerald-700 text-white" : tl.playback === "pause" ? "bg-amber-700" : "bg-[#333] text-stone-400"}`}>
+          {tl.playback.toUpperCase()}
+        </span>
+        <button className="rounded bg-emerald-700 px-2 py-0.5 text-white hover:bg-emerald-600" onClick={() => useApp.getState().setPlayback(tl.id, "play")}>
+          Play
+        </button>
+        <button className="rounded bg-[#333] px-2 py-0.5 hover:bg-[#444]" onClick={() => useApp.getState().setPlayback(tl.id, "pause")}>
+          Pause
+        </button>
+        <button className="rounded bg-[#333] px-2 py-0.5 hover:bg-[#444]" onClick={() => useApp.getState().setPlayback(tl.id, "stop")}>
+          Stop
+        </button>
         {hover && (
           <span className="ml-4 truncate text-stone-400">
             {hover.name}  ·  {formatMs(hover.start)}  ·  {formatMs(hover.duration)}  ·  {hover.id.slice(-6)}

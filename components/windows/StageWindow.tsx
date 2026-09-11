@@ -20,7 +20,7 @@ export function StageWindow() {
       const current = state.show;
       if (canvas && current) {
         const cues = current.timelines
-          .filter((t) => t.enabled && t.playback !== "stop")
+          .filter((t) => t.enabled)
           .flatMap((t) => {
             const ordered = [...t.layers].reverse();
             return ordered.flatMap((layer) => {

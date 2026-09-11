@@ -199,10 +199,12 @@ export const useApp = create<AppState & AppActions>((set, get) => ({
       menu: null,
     });
     get().log("New show created with local Director and Asset Manager");
+    setTimeout(() => get().frameDisplays(), 40);
   },
 
   openDemo: () => {
     const show = makeDemoShow();
+    show.timelines[0].playhead = 1800;
     set({
       view: "producer",
       show,
@@ -211,10 +213,11 @@ export const useApp = create<AppState & AppActions>((set, get) => ({
       history: [],
       future: [],
       windows: defaultLayout(),
-      camera: { x: 2880, y: 540, zoom: 0.16 },
+      camera: { x: 2880, y: 540, zoom: 0.14 },
       dialog: null,
     });
     get().log("Opened WATCHIN demo show — 3-wide LED wall");
+    setTimeout(() => get().frameDisplays(), 40);
   },
 
   openLocal: () => {
@@ -361,7 +364,12 @@ export const useApp = create<AppState & AppActions>((set, get) => ({
     const minY = Math.min(...show.displays.map((d) => d.y));
     const maxX = Math.max(...show.displays.map((d) => d.x + d.width));
     const maxY = Math.max(...show.displays.map((d) => d.y + d.height));
-    set({ camera: { x: (minX + maxX) / 2, y: (minY + maxY) / 2, zoom: 0.18 } });
+    const bw = Math.max(1, maxX - minX);
+    const bh = Math.max(1, maxY - minY);
+    const cssW = Math.max(320, window.innerWidth * 0.4);
+    const cssH = Math.max(220, (window.innerHeight - 36) * 0.48);
+    const zoom = Math.max(0.04, Math.min(1.2, Math.min((cssW - 48) / bw, (cssH - 48) / bh)));
+    set({ camera: { x: (minX + maxX) / 2, y: (minY + maxY) / 2, zoom } });
   },
 
   setTimelineView: (zoom, scroll) =>

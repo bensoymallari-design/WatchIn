@@ -137,7 +137,8 @@ export function drawStage(options: {
     const w = aw * (ev.scaleX / 100);
     const h = ah * (ev.scaleY / 100);
     ctx.save();
-    ctx.globalAlpha = Math.max(0, Math.min(1, ev.opacity / 100));
+    const previewAlpha = Math.max(0, Math.min(1, ev.opacity / 100));
+    ctx.globalAlpha = selectedIds.includes(cue.id) ? Math.max(0.28, previewAlpha) : previewAlpha;
     ctx.translate(ev.x + w * cue.anchor.x, ev.y + h * cue.anchor.y);
     ctx.rotate((ev.rotZ * Math.PI) / 180);
     ctx.translate(-w * cue.anchor.x, -h * cue.anchor.y);
