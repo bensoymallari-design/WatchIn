@@ -27,7 +27,9 @@ export function NdiConnectDialog() {
   const [status, setStatus] = useState("Waiting for a phone to join…");
   const [live, setLive] = useState(false);
 
-  const phoneUrl = joinUrl(room, scan?.lan ?? []);
+  const localUrl = typeof window === "undefined" ? `/cam/${room}` : `${window.location.origin}/cam/${room}`;
+  const lanUrls = lanJoinUrls(room, scan?.lan ?? []);
+  const phoneUrl = lanUrls[0] || localUrl;
 
   useEffect(() => {
     let cancelled = false;
@@ -94,19 +96,24 @@ export function NdiConnectDialog() {
           <div className="text-[10px] uppercase tracking-wider text-stone-500">Phone camera (works)</div>
           <div className={`text-[11px] ${live ? "text-emerald-400" : "text-stone-300"}`}>{status}</div>
           <div className="mt-1 break-all font-mono text-[11px] text-[#f5a623]">{phoneUrl}</div>
+          {lanUrls.slice(1).map((u) => (
+            <div key={u} className="break-all font-mono text-[10px] text-stone-500">
+              {u}
+            </div>
+          ))}
           <div className="mt-2 flex flex-wrap gap-1">
             <button
               className="rounded bg-[#14532d] px-2 py-0.5 text-emerald-100"
               onClick={() => void navigator.clipboard.writeText(phoneUrl)}
             >
-              Copy link
+              Copy phone link
             </button>
-            <a className="rounded bg-[#333] px-2 py-0.5" href={phoneUrl} target="_blank" rel="noreferrer">
+            <a className="rounded bg-[#333] px-2 py-0.5" href={localUrl} target="_blank" rel="noreferrer">
               Open here
             </a>
           </div>
           <p className="mt-1 text-[10px] leading-relaxed text-stone-500">
-            Open that URL in the phone browser — not the NDI HX app. iPhone camera needs https (run <span className="font-mono">npm run dev:https</span> on the PC). Android may allow http on the LAN.
+            Open the phone link in the phone&apos;s browser — not the NDI HX Camera app. The camera is blocked on http://IP; run <span className="font-mono">npm run dev:https</span> and use the https:// address. &quot;Open here&quot; uses this PC (localhost is allowed).
           </p>
         </div>
       </div>
@@ -155,13 +162,17 @@ export function NdiConnectDialog() {
   );
 }
 
-function joinUrl(room: string, lan: { address: string }[]) {
-  if (typeof window === "undefined") return `/cam/${room}`;
+function lanJoinUrls(room: string, lan: { address: string }[]) {
+  if (typeof window === "undefined") return [] as string[];
   const port = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
   const proto = window.location.protocol;
   const path = `/cam/${room}`;
-  if (lan[0]?.address) return `${proto}//${lan[0].address}:${port}${path}`;
-  return `${window.location.origin}${path}`;
+  const urls = lan.map((n) => `${proto}//${n.address}:${port}${path}`);
+  const host = window.location.hostname;
+  if (host && host !== "localhost" && host !== "127.0.0.1" && !urls.some((u) => u.includes(`//${host}:`))) {
+    urls.unshift(`${window.location.origin}${path}`);
+  }
+  return [...new Set(urls)];
 }
 
 function L({ label, children }: { label: string; children: React.ReactNode }) {
