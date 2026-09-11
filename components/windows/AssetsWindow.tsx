@@ -26,12 +26,18 @@ export function AssetsWindow() {
         </button>
         <button
           className="rounded bg-[#14532d] px-2 py-0.5 text-emerald-100"
+          onClick={() => useApp.getState().setDialog("ndiSource")}
+        >
+          Find NDI
+        </button>
+        <button
+          className="rounded bg-[#14532d] px-2 py-0.5 text-emerald-100"
           onClick={() => {
             const id = useApp.getState().ensureNdiAsset();
             if (id) void useApp.getState().connectLiveSource(id, "camera");
           }}
         >
-          NDI Camera
+          PC Camera
         </button>
         <button
           className="rounded bg-[#14532d] px-2 py-0.5 text-emerald-100"
@@ -46,7 +52,7 @@ export function AssetsWindow() {
           className="rounded bg-[#14532d] px-2 py-0.5 text-emerald-100"
           onClick={() => useApp.getState().setDialog("ndiSource")}
         >
-          NDI URL
+          Phone / URL
         </button>
         <span className="ml-auto text-stone-600">Asset Manager · {show.assetManager}</span>
         <input
