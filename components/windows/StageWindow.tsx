@@ -2,16 +2,27 @@
 
 import { useEffect, useRef } from "react";
 import { useApp } from "@/store/appStore";
-import { evaluateCue } from "@/lib/tweens";
-import { drawStage, screenToStage } from "@/lib/renderStage";
-import { Minus, Plus, Focus, Grid3x3 } from "lucide-react";
+import { cameraForDisplay, drawStage, screenToStage } from "@/lib/renderStage";
+import { collectStageCues, cueRects } from "@/lib/stageCues";
+import {
+  cueRect,
+  displayGuides,
+  hitCue,
+  hitDisplay,
+  snapRect,
+  snapThreshold,
+} from "@/lib/stageGeometry";
+import { forEachOutput } from "@/lib/displayOutput";
+import { Minus, Plus, Focus, Grid3x3, Maximize2 } from "lucide-react";
 
 export function StageWindow() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const hostRef = useRef<HTMLDivElement>(null);
+  const hoverDisplayRef = useRef<string | null>(null);
+  const snapGuidesRef = useRef<{ x: number[]; y: number[] } | undefined>(undefined);
   const show = useApp((s) => s.show);
   const camera = useApp((s) => s.camera);
   const draggingAssetId = useApp((s) => s.draggingAssetId);
+  const snap = useApp((s) => s.snap);
 
   useEffect(() => {
     let raf = 0;
@@ -20,18 +31,7 @@ export function StageWindow() {
       const state = useApp.getState();
       const current = state.show;
       if (canvas && current) {
-        const cues = current.timelines
-          .filter((t) => t.enabled)
-          .flatMap((t) => {
-            const ordered = [...t.layers].reverse();
-            return ordered.flatMap((layer) => {
-              if (!layer.enabled) return [];
-              return t.cues
-                .filter((c) => c.layerId === layer.id)
-                .map((c) => evaluateCue(c, t.playhead, t.cues))
-                .filter((x): x is NonNullable<typeof x> => !!x);
-            });
-          });
+        const cues = collectStageCues(current);
         drawStage({
           canvas,
           displays: current.displays,
@@ -41,6 +41,24 @@ export function StageWindow() {
           selectedIds: state.selection.ids,
           timeMs: performance.now(),
           showGrid: true,
+          highlightDisplayId: hoverDisplayRef.current,
+          snapGuides: snapGuidesRef.current,
+        });
+        forEachOutput((id, outCanvas) => {
+          const display = current.displays.find((d) => d.id === id);
+          if (!display || outCanvas.clientWidth < 2) return;
+          drawStage({
+            canvas: outCanvas,
+            displays: current.displays,
+            cues,
+            assets: current.assets,
+            camera: cameraForDisplay(display, outCanvas.clientWidth, outCanvas.clientHeight),
+            selectedIds: [],
+            timeMs: performance.now(),
+            showGrid: false,
+            clipDisplay: display,
+            pixelPerfect: true,
+          });
         });
       }
       raf = requestAnimationFrame(paint);
@@ -84,14 +102,28 @@ export function StageWindow() {
   if (!show) return null;
 
   return (
-    <div ref={hostRef} className="relative flex h-full flex-col bg-[#101010]">
+    <div className="relative flex h-full flex-col bg-[#101010]">
       <div className="flex h-7 items-center gap-1 border-b border-black bg-[#1a1a1a] px-2 text-[11px] text-stone-400">
         <Tool icon={<Plus size={12} />} onClick={() => useApp.getState().setCamera({ zoom: Math.min(8, camera.zoom * 1.2) })} />
         <Tool icon={<Minus size={12} />} onClick={() => useApp.getState().setCamera({ zoom: Math.max(0.02, camera.zoom / 1.2) })} />
         <Tool icon={<Focus size={12} />} onClick={() => useApp.getState().frameDisplays()} />
         <Tool icon={<Grid3x3 size={12} />} onClick={() => useApp.getState().setDialog("displayGrid")} />
+        <button
+          className="rounded px-1.5 py-0.5 hover:bg-white/10"
+          onClick={() => useApp.getState().fitSelectedToDisplay("cover")}
+        >
+          Fit display
+        </button>
+        <button
+          className="rounded px-1.5 py-0.5 hover:bg-white/10"
+          onClick={() => void useApp.getState().outputSelectedDisplay()}
+        >
+          <span className="inline-flex items-center gap-1">
+            <Maximize2 size={11} /> Output
+          </span>
+        </button>
         <span className="ml-2">Stage px  ·  zoom {(camera.zoom * 100).toFixed(0)}%</span>
-        <span className="ml-auto text-stone-500">Scroll pan · Ctrl/pinch zoom Stage only</span>
+        <span className="ml-auto text-stone-500">Drop asset on a display to snap 1:1 · drag cue to snap edges</span>
         <span>
           {show.displays.length} displays  ·  {show.displays.reduce((n, d) => n + d.width, 0)}×
           {Math.max(...show.displays.map((d) => d.height), 0)}
@@ -103,16 +135,64 @@ export function StageWindow() {
         onPointerDown={(e) => {
           const canvas = canvasRef.current;
           if (!canvas) return;
-          const cam = useApp.getState().camera;
+          const state = useApp.getState();
+          const cam = state.camera;
           const pt = screenToStage(canvas, cam, e.clientX, e.clientY);
-          const hitDisplay = [...show.displays].reverse().find(
-            (d) => pt.x >= d.x && pt.x <= d.x + d.width && pt.y >= d.y && pt.y <= d.y + d.height,
-          );
-          if (hitDisplay) {
-            useApp.getState().select({ kind: "display", ids: [hitDisplay.id] });
-            useApp.getState().focusWindow("properties");
+          const current = state.show;
+          if (!current) return;
+          const cues = collectStageCues(current);
+          const media = e.altKey ? undefined : hitCue(cues, current.assets, pt);
+          if (media) {
+            state.select({ kind: "cue", ids: [media.cue.id] });
+            state.focusWindow("properties");
+            const asset = current.assets.find((a) => a.id === media.cue.assetId);
+            const startRect = cueRect(media, asset);
+            const origin = { x: e.clientX, y: e.clientY, px: media.cue.position.x, py: media.cue.position.y };
+            let dragged = false;
+            const move = (ev: PointerEvent) => {
+              const dx = (ev.clientX - origin.x) / cam.zoom;
+              const dy = (ev.clientY - origin.y) / cam.zoom;
+              if (!dragged && Math.hypot(ev.clientX - origin.x, ev.clientY - origin.y) < 4) return;
+              dragged = true;
+              let x = origin.px + (ev.shiftKey && Math.abs(dx) < Math.abs(dy) ? 0 : dx);
+              let y = origin.py + (ev.shiftKey && Math.abs(dy) < Math.abs(dx) ? 0 : dy);
+              const moving = { x, y, w: startRect.w, h: startRect.h };
+              if (state.snap) {
+                const dg = displayGuides(current.displays);
+                const others = cueRects(
+                  cues.filter((c) => c.cue.id !== media.cue.id),
+                  current.assets,
+                );
+                const snapped = snapRect(
+                  moving,
+                  [...dg.x, ...others.flatMap((r) => [r.x, r.x + r.w])],
+                  [...dg.y, ...others.flatMap((r) => [r.y, r.y + r.h])],
+                  snapThreshold(cam.zoom),
+                );
+                x = snapped.x;
+                y = snapped.y;
+                snapGuidesRef.current = {
+                  x: [snapped.x, snapped.x + snapped.w],
+                  y: [snapped.y, snapped.y + snapped.h],
+                };
+              }
+              state.updateCue(media.cue.id, { position: { ...media.cue.position, x: Math.round(x), y: Math.round(y) } });
+            };
+            const up = () => {
+              snapGuidesRef.current = undefined;
+              window.removeEventListener("pointermove", move);
+              window.removeEventListener("pointerup", up);
+            };
+            window.addEventListener("pointermove", move);
+            window.addEventListener("pointerup", up);
+            return;
+          }
+          const hitD = hitDisplay(current.displays, pt);
+          if (hitD) {
+            state.select({ kind: "display", ids: [hitD.id] });
+            state.focusWindow("properties");
           } else {
-            useApp.getState().clearSelection();
+            state.clearSelection();
           }
           const origin = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y };
           const move = (ev: PointerEvent) => {
@@ -127,14 +207,43 @@ export function StageWindow() {
           window.addEventListener("pointermove", move);
           window.addEventListener("pointerup", up);
         }}
-        onDragOver={(e) => e.preventDefault()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          const canvas = canvasRef.current;
+          const current = useApp.getState().show;
+          if (!canvas || !current) return;
+          const pt = screenToStage(canvas, useApp.getState().camera, e.clientX, e.clientY);
+          hoverDisplayRef.current = hitDisplay(current.displays, pt)?.id ?? null;
+        }}
+        onDragLeave={() => {
+          hoverDisplayRef.current = null;
+        }}
         onDrop={(e) => {
           e.preventDefault();
           const canvas = canvasRef.current;
-          if (!canvas) return;
-          const pt = screenToStage(canvas, useApp.getState().camera, e.clientX, e.clientY);
+          const current = useApp.getState().show;
+          if (!canvas || !current) return;
+          const cam = useApp.getState().camera;
+          const pt = screenToStage(canvas, cam, e.clientX, e.clientY);
           const assetId = e.dataTransfer.getData("text/asset") || draggingAssetId;
-          if (assetId) useApp.getState().addCueFromAsset(assetId, undefined, undefined, pt);
+          hoverDisplayRef.current = null;
+          if (!assetId) return;
+          const display = hitDisplay(current.displays, pt);
+          if (display) {
+            useApp.getState().addCueFromAsset(assetId, undefined, undefined, { displayId: display.id });
+            return;
+          }
+          const asset = current.assets.find((a) => a.id === assetId);
+          const w = asset?.width ?? 1920;
+          const h = asset?.height ?? 1080;
+          let x = pt.x;
+          let y = pt.y;
+          if (snap) {
+            const snapped = snapRect({ x, y, w, h }, displayGuides(current.displays).x, displayGuides(current.displays).y, snapThreshold(cam.zoom));
+            x = snapped.x;
+            y = snapped.y;
+          }
+          useApp.getState().addCueFromAsset(assetId, undefined, undefined, { x: Math.round(x), y: Math.round(y) });
         }}
       />
     </div>
