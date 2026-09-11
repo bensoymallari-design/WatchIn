@@ -1,18 +1,25 @@
 "use client";
 
 import { useApp } from "@/store/appStore";
+import { NdiConnectDialog } from "@/components/NdiConnectDialog";
 import { useState } from "react";
 
 export function Dialogs() {
   const dialog = useApp((s) => s.dialog);
   if (!dialog) return null;
   return (
-    <div className="absolute inset-0 z-[80] grid place-items-center bg-black/50" onClick={() => useApp.getState().setDialog(null)}>
-      <div className="w-[420px] rounded border border-[#444] bg-[#1c1c1c] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="absolute inset-0 z-[80] grid place-items-center bg-black/50"
+      onClick={() => {
+        if (useApp.getState().dialog === "ndiSource") return;
+        useApp.getState().setDialog(null);
+      }}
+    >
+      <div className={`rounded border border-[#444] bg-[#1c1c1c] shadow-2xl ${dialog === "ndiSource" ? "w-[560px]" : "w-[420px]"}`} onClick={(e) => e.stopPropagation()}>
         {dialog === "displayGrid" && <GridDialog />}
         {dialog === "about" && <AboutDialog />}
         {dialog === "openShow" && <OpenDialog />}
-        {dialog === "ndiSource" && <NdiDialog />}
+        {dialog === "ndiSource" && <NdiConnectDialog />}
       </div>
     </div>
   );
@@ -77,56 +84,6 @@ function OpenDialog() {
       <div className="mt-4 text-right">
         <button className="rounded bg-[#f5a623] px-3 py-1 text-black" onClick={() => useApp.getState().setDialog(null)}>
           OK
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function NdiDialog() {
-  const [url, setUrl] = useState("");
-  return (
-    <div className="p-4">
-      <div className="mb-2 text-sm font-semibold text-[#f5a623]">NDI / live input</div>
-      <p className="mb-3 text-[12px] text-stone-400">
-        Browsers cannot speak native NDI. Bind this input to a camera, a screen share, or an HTTP/WebRTC-style video URL. The Stage treats it as an NDI capture source.
-      </p>
-      <div className="flex gap-2">
-        <button
-          className="rounded bg-[#14532d] px-2 py-1 text-emerald-100"
-          onClick={() => {
-            const id = useApp.getState().ensureNdiAsset();
-            if (id) void useApp.getState().connectLiveSource(id, "camera");
-            useApp.getState().setDialog(null);
-          }}
-        >
-          Camera
-        </button>
-        <button
-          className="rounded bg-[#14532d] px-2 py-1 text-emerald-100"
-          onClick={() => {
-            const id = useApp.getState().ensureNdiAsset();
-            if (id) void useApp.getState().connectLiveSource(id, "screen");
-            useApp.getState().setDialog(null);
-          }}
-        >
-          Screen
-        </button>
-      </div>
-      <L label="Stream URL">
-        <input value={url} placeholder="https://…/stream.m3u8 or .mp4" onChange={(e) => setUrl(e.target.value)} />
-      </L>
-      <div className="mt-4 flex justify-end gap-2">
-        <button className="px-3 py-1" onClick={() => useApp.getState().setDialog(null)}>Cancel</button>
-        <button
-          className="rounded bg-[#f5a623] px-3 py-1 text-black"
-          onClick={() => {
-            const id = useApp.getState().ensureNdiAsset();
-            if (id) void useApp.getState().connectLiveSource(id, "url", url);
-            useApp.getState().setDialog(null);
-          }}
-        >
-          Connect URL
         </button>
       </div>
     </div>

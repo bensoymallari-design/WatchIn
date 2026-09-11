@@ -1,6 +1,6 @@
 const listeners = new Set<() => void>();
 
-export type LiveKind = "camera" | "screen" | "url";
+export type LiveKind = "camera" | "screen" | "url" | "phone";
 
 interface LiveEntry {
   video: HTMLVideoElement;
@@ -70,6 +70,10 @@ export async function connectScreen(assetId: string) {
   });
   stream.getVideoTracks()[0]?.addEventListener("ended", () => disconnectLive(assetId));
   return attachStream(assetId, stream, "screen");
+}
+
+export function attachRemoteStream(assetId: string, stream: MediaStream) {
+  return attachStream(assetId, stream, "phone");
 }
 
 export async function connectUrl(assetId: string, url: string) {

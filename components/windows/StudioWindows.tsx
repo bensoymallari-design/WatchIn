@@ -41,6 +41,10 @@ export function DevicesWindow() {
             <button
               className="rounded bg-[#14532d] px-2 py-0.5 text-[11px] text-emerald-100"
               onClick={() => {
+                if (d.kind === "NDI") {
+                  useApp.getState().setDialog("ndiSource");
+                  return;
+                }
                 const id = useApp.getState().ensureNdiAsset();
                 if (id) void useApp.getState().connectLiveSource(id, d.kind === "USB" ? "camera" : "screen");
               }}
