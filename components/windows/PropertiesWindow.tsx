@@ -115,6 +115,14 @@ function CueProps({ cue }: { cue: Cue }) {
       <Num label="Position Y" value={cue.position.y} onChange={(v) => u({ position: { ...cue.position, y: v } })} />
       <Num label="Scale X %" value={cue.scale.x} onChange={(v) => u({ scale: { ...cue.scale, x: v } })} />
       <Num label="Scale Y %" value={cue.scale.y} onChange={(v) => u({ scale: { ...cue.scale, y: v } })} />
+      <div className="flex flex-wrap gap-1 py-1">
+        <button className="rounded bg-[#14532d] px-2 py-0.5 text-[11px] text-emerald-100" onClick={() => useApp.getState().fitSelectedToDisplay("cover")}>
+          Fit to display
+        </button>
+        <button className="rounded bg-[#333] px-2 py-0.5 text-[11px]" onClick={() => useApp.getState().fitSelectedToDisplay("contain")}>
+          Fit inside
+        </button>
+      </div>
       <Num label="Rotation Z" value={cue.rotation.z} onChange={(v) => u({ rotation: { ...cue.rotation, z: v } })} />
       <Num label="Opacity" value={cue.opacity} onChange={(v) => u({ opacity: v })} />
       <Num label="Volume" value={cue.volume} onChange={(v) => u({ volume: v })} />
@@ -161,6 +169,17 @@ function DisplayProps({ display }: { display: Display }) {
       <Check label="Enabled" checked={display.enabled} onChange={(v) => u({ enabled: v })} />
       <Check label="Soft-edge blend" checked={display.blend} onChange={(v) => u({ blend: v })} />
       <Num label="Blend width" value={display.blendWidth} onChange={(v) => u({ blendWidth: v })} />
+      <div className="mt-2 flex flex-wrap gap-1">
+        <button className="rounded bg-[#f5a623] px-2 py-1 text-[11px] text-black" onClick={() => void useApp.getState().outputSelectedDisplay()}>
+          Output / Fullscreen
+        </button>
+        <button className="rounded bg-[#14532d] px-2 py-1 text-[11px] text-emerald-100" onClick={() => useApp.getState().fitSelectedToDisplay("cover")}>
+          Snap cue to this display
+        </button>
+      </div>
+      <p className="mt-2 text-[10px] leading-relaxed text-stone-500">
+        HDMI is not a native GPU bind in the browser. Windows must already see the monitor (Win+P → Extend). Output opens a fullscreen window on that screen.
+      </p>
     </Panel>
   );
 }

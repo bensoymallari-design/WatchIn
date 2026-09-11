@@ -138,6 +138,10 @@ export function Keyboard() {
         e.preventDefault();
         a.frameDisplays();
       }
+      if (mod && e.shiftKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        a.fitSelectedToDisplay("cover");
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

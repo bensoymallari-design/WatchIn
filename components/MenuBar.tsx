@@ -181,6 +181,9 @@ function StageMenu() {
       <Item label="Create Display Grid…" onClick={() => a().setDialog("displayGrid")} />
       <Sep />
       <Item label="Frame All Displays" shortcut="Ctrl+Shift+D" onClick={() => { a().frameDisplays(); a().setMenu(null); }} />
+      <Item label="Fit Selected to Display" shortcut="Ctrl+Shift+F" onClick={() => { a().fitSelectedToDisplay("cover"); a().setMenu(null); }} />
+      <Item label="Fit Inside Display" onClick={() => { a().fitSelectedToDisplay("contain"); a().setMenu(null); }} />
+      <Item label="Output Selected Display" onClick={() => { void a().outputSelectedDisplay(); a().setMenu(null); }} />
       <Item label="Scroll to Origin" shortcut="Ctrl+Shift+O" onClick={() => { a().setCamera({ x: 0, y: 0 }); a().setMenu(null); }} />
     </>
   );

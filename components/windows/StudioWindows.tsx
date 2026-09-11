@@ -1,25 +1,104 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useApp } from "@/store/appStore";
+import {
+  closeDisplayOutput,
+  isOutputLive,
+  listScreens,
+  openDisplayOutput,
+  subscribeOutputs,
+  type OutputScreen,
+} from "@/lib/displayOutput";
 
 export function DevicesWindow() {
   const show = useApp((s) => s.show);
+  const [screens, setScreens] = useState<OutputScreen[]>([]);
+  const [screenNote, setScreenNote] = useState("Click Find screens after Windows sees the HDMI monitor.");
+  const [liveTick, setLiveTick] = useState(0);
+
+  useEffect(() => subscribeOutputs(() => setLiveTick((n) => n + 1)), []);
+  void liveTick;
+
   if (!show) return null;
+
   return (
     <div className="h-full overflow-auto bg-[#171717] text-[12px]">
       <Section title="Displays">
-        {show.displays.map((d) => (
+        {show.displays.map((d) => {
+          const live = isOutputLive(d.id);
+          return (
+            <div key={d.id} className="flex items-center justify-between gap-2 border-b border-[#222] px-3 py-1.5">
+              <button className="min-w-0 flex-1 text-left hover:text-[#f5a623]" onClick={() => useApp.getState().select({ kind: "display", ids: [d.id] })}>
+                <span>{d.name}</span>
+                <span className="ml-2 text-stone-500">
+                  {d.outputType}:{d.channel} · {d.width}×{d.height}
+                </span>
+                {live && <span className="ml-2 text-emerald-400">LIVE</span>}
+              </button>
+              {live ? (
+                <button className="rounded bg-[#333] px-2 py-0.5 text-[11px]" onClick={() => closeDisplayOutput(d.id)}>
+                  Stop
+                </button>
+              ) : (
+                <button
+                  className="rounded bg-[#f5a623] px-2 py-0.5 text-[11px] text-black"
+                  onClick={() => {
+                    useApp.getState().select({ kind: "display", ids: [d.id] });
+                    void useApp.getState().outputSelectedDisplay();
+                  }}
+                >
+                  Output
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </Section>
+      <Section title="Monitors">
+        <div className="flex items-center justify-between border-b border-[#222] px-3 py-1.5">
+          <span className="text-stone-400">{screens.length ? `${screens.length} screen(s)` : "Not scanned"}</span>
           <button
-            key={d.id}
-            className="flex w-full items-center justify-between border-b border-[#222] px-3 py-1.5 text-left hover:bg-white/5"
-            onClick={() => useApp.getState().select({ kind: "display", ids: [d.id] })}
+            className="rounded bg-[#14532d] px-2 py-0.5 text-[11px] text-emerald-100"
+            onClick={() => {
+              void listScreens().then((list) => {
+                setScreens(list);
+                const extras = list.filter((s) => !s.isPrimary);
+                setScreenNote(
+                  extras.length
+                    ? "HDMI / extra monitor found. Click Output on a display, then Fullscreen."
+                    : "Only this PC screen is visible. Extend HDMI in Windows (Win+P), allow window placement, then Find screens again. A browser cannot detect a cable the OS does not see.",
+                );
+              });
+            }}
           >
-            <span>{d.name}</span>
-            <span className="text-stone-500">
-              {d.outputType}:{d.channel} · {d.width}×{d.height} · {d.nodeId}
-            </span>
+            Find screens
           </button>
+        </div>
+        {screens.map((s) => (
+          <div key={s.id} className="flex items-center justify-between gap-2 border-b border-[#222] px-3 py-1.5">
+            <span className="truncate">
+              {s.label}
+              {s.isPrimary ? " · primary" : ""}
+              <span className="ml-2 text-stone-500">
+                {s.width}×{s.height}
+              </span>
+            </span>
+            <button
+              className="shrink-0 rounded bg-[#333] px-2 py-0.5 text-[11px]"
+              onClick={() => {
+                const display = show.displays[0];
+                if (!display) return;
+                void openDisplayOutput(display.id, s).then(() => {
+                  useApp.getState().log(`Output ${display.name} → ${s.label}`);
+                });
+              }}
+            >
+              Output here
+            </button>
+          </div>
         ))}
+        <p className="px-3 py-2 text-[10px] leading-relaxed text-stone-500">{screenNote}</p>
       </Section>
       <Section title="Audio">
         {show.audioDevices.map((d) => (
@@ -205,9 +284,12 @@ function Meters({ cpu, gpu, ram, disk }: { cpu: number; gpu: number; ram: number
 function Bar({ label, v }: { label: string; v: number }) {
   return (
     <div>
-      <div>{label} {v}%</div>
-      <div className="mt-0.5 h-1 bg-[#333]">
-        <div className="h-1 bg-[#f5a623]" style={{ width: `${v}%` }} />
+      <div className="mb-0.5 flex justify-between">
+        <span>{label}</span>
+        <span>{Math.round(v)}%</span>
+      </div>
+      <div className="h-1 bg-[#333]">
+        <div className="h-1 bg-[#f5a623]" style={{ width: `${Math.max(0, Math.min(100, v))}%` }} />
       </div>
     </div>
   );

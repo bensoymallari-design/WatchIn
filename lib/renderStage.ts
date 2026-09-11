@@ -78,6 +78,19 @@ export interface StageCamera {
   zoom: number;
 }
 
+export function cameraForDisplay(
+  display: Display,
+  cssW: number,
+  cssH: number,
+): StageCamera {
+  const zoom = Math.min(cssW / Math.max(1, display.width), cssH / Math.max(1, display.height));
+  return {
+    x: display.x + display.width / 2,
+    y: display.y + display.height / 2,
+    zoom,
+  };
+}
+
 export function drawStage(options: {
   canvas: HTMLCanvasElement;
   displays: Display[];
@@ -87,11 +100,28 @@ export function drawStage(options: {
   selectedIds: string[];
   timeMs: number;
   showGrid: boolean;
+  highlightDisplayId?: string | null;
+  clipDisplay?: Display | null;
+  snapGuides?: { x: number[]; y: number[] };
+  pixelPerfect?: boolean;
 }) {
-  const { canvas, displays, cues, assets, camera, selectedIds, timeMs, showGrid } = options;
+  const {
+    canvas,
+    displays,
+    cues,
+    assets,
+    camera,
+    selectedIds,
+    timeMs,
+    showGrid,
+    highlightDisplayId,
+    clipDisplay,
+    snapGuides,
+    pixelPerfect,
+  } = options;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = pixelPerfect ? 1 : window.devicePixelRatio || 1;
   const cssW = canvas.clientWidth;
   const cssH = canvas.clientHeight;
   if (canvas.width !== Math.floor(cssW * dpr) || canvas.height !== Math.floor(cssH * dpr)) {
@@ -107,6 +137,13 @@ export function drawStage(options: {
   ctx.translate(cssW / 2, cssH / 2);
   ctx.scale(camera.zoom, camera.zoom);
   ctx.translate(-camera.x, -camera.y);
+
+  if (clipDisplay) {
+    ctx.beginPath();
+    ctx.rect(clipDisplay.x, clipDisplay.y, clipDisplay.width, clipDisplay.height);
+    ctx.clip();
+    ctx.imageSmoothingEnabled = !(pixelPerfect && Math.abs(camera.zoom - 1) < 0.001);
+  }
 
   if (showGrid) {
     const span = 20000;
@@ -198,13 +235,38 @@ export function drawStage(options: {
     ctx.restore();
   }
 
-  for (const d of displays) {
+  if (snapGuides) {
+    ctx.save();
+    ctx.strokeStyle = "rgba(245,158,11,0.65)";
+    ctx.lineWidth = 1 / camera.zoom;
+    ctx.setLineDash([6 / camera.zoom, 4 / camera.zoom]);
+    for (const x of snapGuides.x) {
+      ctx.beginPath();
+      ctx.moveTo(x, camera.y - 20000);
+      ctx.lineTo(x, camera.y + 20000);
+      ctx.stroke();
+    }
+    for (const y of snapGuides.y) {
+      ctx.beginPath();
+      ctx.moveTo(camera.x - 20000, y);
+      ctx.lineTo(camera.x + 20000, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  if (!clipDisplay) {
+    for (const d of displays) {
     if (!d.enabled) continue;
     ctx.save();
     ctx.translate(d.x + d.width / 2, d.y + d.height / 2);
     ctx.rotate((d.rotation * Math.PI) / 180);
     ctx.translate(-d.width / 2, -d.height / 2);
-    ctx.strokeStyle = selectedIds.includes(d.id) ? "#f59e0b" : d.virtual ? "#38bdf8" : "#e7e5e4";
+    if (highlightDisplayId === d.id) {
+      ctx.fillStyle = "rgba(245,158,11,0.16)";
+      ctx.fillRect(0, 0, d.width, d.height);
+    }
+    ctx.strokeStyle = selectedIds.includes(d.id) || highlightDisplayId === d.id ? "#f59e0b" : d.virtual ? "#38bdf8" : "#e7e5e4";
     ctx.lineWidth = (selectedIds.includes(d.id) ? 3 : 1.5) / camera.zoom;
     ctx.strokeRect(0, 0, d.width, d.height);
     ctx.fillStyle = "rgba(0,0,0,0.35)";
@@ -226,6 +288,7 @@ export function drawStage(options: {
     }
     void labelH;
     ctx.restore();
+    }
   }
 
   ctx.restore();
