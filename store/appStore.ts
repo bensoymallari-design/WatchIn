@@ -13,8 +13,9 @@ import type {
 } from "@/types/show";
 import { defaultLayout, liveLayout, programmingLayout } from "@/lib/layout";
 import { uid } from "@/lib/ids";
-import { emptyCue, emptyDisplay, emptyLayer, emptyShow, emptyTimeline, makeDemoShow } from "@/lib/showFactory";
+import { emptyCue, emptyDisplay, emptyLayer, emptyShow, emptyTimeline, emptyAsset, makeDemoShow } from "@/lib/showFactory";
 import { fadeTweens, makeTween } from "@/lib/tweens";
+import { connectCamera, connectScreen, connectUrl } from "@/lib/liveSources";
 import { downloadShow, loadLayouts, loadRecents, loadShowLocal, saveLayouts, saveShowLocal, type RecentShow } from "@/lib/persistence";
 
 export interface LogEntry {
@@ -52,6 +53,7 @@ interface AppState {
   future: string[];
   draggingAssetId: string | null;
   fpsNow: number;
+  liveTick: number;
 }
 
 interface AppActions {
@@ -117,6 +119,8 @@ interface AppActions {
   setDraggingAsset: (id: string | null) => void;
   setFpsNow: (n: number) => void;
   toggleMessages: () => void;
+  ensureNdiAsset: () => string | null;
+  connectLiveSource: (assetId: string, mode: "camera" | "screen" | "url", url?: string) => Promise<void>;
 }
 
 function snapshot(show: Show | null) {
@@ -170,6 +174,7 @@ export const useApp = create<AppState & AppActions>((set, get) => ({
   future: [],
   draggingAssetId: null,
   fpsNow: 60,
+  liveTick: 0,
 
   boot: () => {
     set({ recents: loadRecents(), presets: loadLayouts({}) });
@@ -506,12 +511,17 @@ export const useApp = create<AppState & AppActions>((set, get) => ({
         const asset = show.assets.find((a) => a.id === assetId);
         if (!asset) return show;
         const layer = layerId ?? tl.layers.find((l) => !l.locked)?.id ?? tl.layers[0].id;
-        const duration = asset.kind === "image" ? show.prefs.imageDuration : asset.duration || 5000;
+        const live = asset.kind === "ndi" || asset.kind === "capture";
+        const duration = live
+          ? Math.max(tl.duration - (start ?? tl.playhead), 10000)
+          : asset.kind === "image"
+            ? show.prefs.imageDuration
+            : asset.duration || 5000;
         const cueStart = start ?? tl.playhead;
-        const tweens = show.prefs.autoFade ? fadeTweens(duration, show.prefs.fadeIn, show.prefs.fadeOut) : [];
+        const tweens = !live && show.prefs.autoFade ? fadeTweens(duration, show.prefs.fadeIn, show.prefs.fadeOut) : [];
         const cue = emptyCue({
           name: asset.name,
-          type: asset.kind === "audio" ? "media" : "media",
+          type: "media",
           layerId: layer,
           start: cueStart,
           duration,
@@ -519,6 +529,7 @@ export const useApp = create<AppState & AppActions>((set, get) => ({
           color: asset.color,
           position: position ? { x: position.x, y: position.y, z: 0 } : { x: 0, y: 0, z: 0 },
           tweens,
+          freeRunning: live,
         });
         return {
           ...show,
@@ -853,6 +864,55 @@ export const useApp = create<AppState & AppActions>((set, get) => ({
   setDraggingAsset: (id) => set({ draggingAssetId: id }),
   setFpsNow: (n) => set({ fpsNow: n }),
   toggleMessages: () => set((s) => ({ messagesOpen: !s.messagesOpen, menu: null })),
+
+  ensureNdiAsset: () => {
+    const { show, selection } = get();
+    if (!show) return null;
+    if (selection.kind === "asset") {
+      const selected = show.assets.find((a) => a.id === selection.ids[0]);
+      if (selected && (selected.kind === "ndi" || selected.kind === "capture")) return selected.id;
+    }
+    const existing = show.assets.find((a) => a.kind === "ndi");
+    if (existing) return existing.id;
+    const asset = emptyAsset({
+      name: "NDI Program",
+      kind: "ndi",
+      codec: "NDI HX3",
+      duration: 60000,
+      color: "#4ade80",
+      url: "procedural:ndi",
+      notes: "Live NDI / capture input",
+    });
+    set((s) =>
+      patchShow(s, (doc) => ({ ...doc, assets: [...doc.assets, asset] })),
+    );
+    get().select({ kind: "asset", ids: [asset.id] });
+    return asset.id;
+  },
+
+  connectLiveSource: async (assetId, mode, url) => {
+    try {
+      if (mode === "camera") await connectCamera(assetId);
+      else if (mode === "screen") await connectScreen(assetId);
+      else {
+        if (!url) throw new Error("Enter a stream URL");
+        await connectUrl(assetId, url);
+      }
+      get().updateAsset(assetId, {
+        notes: mode === "url" ? `Live URL · ${url}` : `Live ${mode} bound to this NDI input`,
+        codec: mode === "camera" ? "NDI · Camera" : mode === "screen" ? "NDI · Screen" : "NDI HX / URL",
+        optimized: true,
+      });
+      set((s) => ({ liveTick: s.liveTick + 1 }));
+      get().log(`NDI source connected (${mode})`);
+      const show = get().show;
+      const used = show?.timelines.some((t) => t.cues.some((c) => c.assetId === assetId));
+      if (!used) get().addCueFromAsset(assetId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "NDI connect failed";
+      get().log(message, "error");
+    }
+  },
 }));
 
 export function useActiveTimeline() {

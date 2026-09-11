@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useApp, useActiveTimeline } from "@/store/appStore";
 import { formatMs } from "@/lib/time";
 import { Pause, Play, Square, ZoomIn, ZoomOut, Maximize2, Eye, Lock } from "lucide-react";
@@ -17,6 +17,21 @@ export function TimelineWindow() {
   const clickJumps = useApp((s) => s.clickJumpsToTime);
   const hoverCueId = useApp((s) => s.hoverCueId);
   const areaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = areaRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const state = useApp.getState();
+      const next = e.deltaY < 0 ? state.timelineZoom * 1.15 : state.timelineZoom / 1.15;
+      state.setTimelineView(Math.max(0.002, Math.min(0.2, next)), state.timelineScroll);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [tl?.id]);
 
   const pxPerMs = zoom;
   const duration = tl?.duration ?? 60000;
@@ -87,13 +102,6 @@ export function TimelineWindow() {
         <div
           ref={areaRef}
           className="relative min-w-0 flex-1 overflow-auto"
-          onWheel={(e) => {
-            if (e.ctrlKey) {
-              e.preventDefault();
-              const next = e.deltaY < 0 ? zoom * 1.15 : zoom / 1.15;
-              useApp.getState().setTimelineView(Math.max(0.002, Math.min(0.2, next)), scroll);
-            }
-          }}
           onScroll={(e) => useApp.getState().setTimelineView(undefined, (e.target as HTMLDivElement).scrollLeft)}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {

@@ -328,4 +328,5 @@ export type DialogKind =
   | "about"
   | "find"
   | "insertTime"
-  | "connectDirector";
+  | "connectDirector"
+  | "ndiSource";

@@ -19,9 +19,26 @@ import {
 import { TimelineWindow } from "@/components/windows/TimelineWindow";
 import { TimelinesWindow } from "@/components/windows/TimelinesWindow";
 import { useApp } from "@/store/appStore";
+import { useEffect } from "react";
 
 export function Producer() {
   const setMenu = useApp((s) => s.setMenu);
+
+  useEffect(() => {
+    const blockPageZoom = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) e.preventDefault();
+    };
+    const blockGesture = (e: Event) => e.preventDefault();
+    window.addEventListener("wheel", blockPageZoom, { passive: false });
+    window.addEventListener("gesturestart", blockGesture);
+    window.addEventListener("gesturechange", blockGesture);
+    return () => {
+      window.removeEventListener("wheel", blockPageZoom);
+      window.removeEventListener("gesturestart", blockGesture);
+      window.removeEventListener("gesturechange", blockGesture);
+    };
+  }, []);
+
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#0e0e0e]">
       <MenuBar />

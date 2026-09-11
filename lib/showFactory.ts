@@ -263,7 +263,7 @@ export function makeDemoShow(): Show {
     duration: 60000,
     color: "#4ade80",
     url: "procedural:ndi",
-    notes: "Simulated NDI input",
+    notes: "Connect Camera, Screen, or a stream URL in Assets to replace the generator",
   });
   const sting = emptyAsset({
     name: "Impact Sting",
@@ -338,13 +338,13 @@ export function makeDemoShow(): Show {
     }),
     emptyCue({
       name: "NDI Live",
-      layerId: l1.id,
-      start: 22000,
-      duration: 14000,
+      layerId: l4.id,
+      start: 0,
+      duration: 45000,
       assetId: ndi.id,
       color: ndi.color,
-      position: { x: 1920, y: 0, z: 0 },
-      tweens: fade(14000),
+      position: { x: 3840, y: 0, z: 0 },
+      freeRunning: true,
     }),
     emptyCue({
       name: "End Grid",
