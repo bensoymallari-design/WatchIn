@@ -1,5 +1,9 @@
 import dgram from "dgram";
 import os from "os";
+import { collapseSources, tidyNdiName, type NdiAdvert } from "@/lib/ndiNames";
+
+export type { NdiAdvert };
+export { collapseSources, tidyNdiName } from "@/lib/ndiNames";
 
 export function lanIPv4() {
   const out: { address: string; name: string }[] = [];
@@ -9,13 +13,6 @@ export function lanIPv4() {
     }
   }
   return out;
-}
-
-export interface NdiAdvert {
-  name: string;
-  host: string;
-  port: number;
-  ip?: string;
 }
 
 const MDNS_ADDR = "224.0.0.251";
@@ -106,7 +103,7 @@ function parseRecords(buf: Buffer) {
 }
 
 function instanceName(fqdn: string) {
-  return fqdn.replace(/\._ndi\._tcp\.local$/i, "").replace(/\.local$/i, "");
+  return tidyNdiName(fqdn);
 }
 
 function ingest(byName: Map<string, NdiAdvert>, buf: Buffer) {
@@ -176,5 +173,5 @@ export async function discoverNdiSources(timeoutMs = 2200): Promise<NdiAdvert[]>
     });
   });
 
-  return [...byName.values()].filter((s) => s.name && !s.name.startsWith("_"));
+  return collapseSources([...byName.values()]);
 }
